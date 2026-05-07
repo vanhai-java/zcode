@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
+import { Memory } from "../../src/memory"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
 import { testEffect } from "../lib/effect"
@@ -35,17 +36,35 @@ const build: Agent.Info = {
   options: {},
 }
 
+const skillLayer = Layer.succeed(
+  Skill.Service,
+  Skill.Service.of({
+    get: (name) => Effect.succeed(skills.find((skill) => skill.name === name)),
+    all: () => Effect.succeed(skills),
+    dirs: () => Effect.succeed([]),
+    available: () => Effect.succeed(skills),
+  }),
+)
+
+const memoryLayer = Layer.succeed(
+  Memory.Service,
+  Memory.Service.of({
+    get: () => Effect.succeed("test memory content here"),
+  }),
+)
+
 const it = testEffect(
   SystemPrompt.layer.pipe(
+    Layer.provide(Layer.mergeAll(skillLayer, memoryLayer)),
+  ),
+)
+
+const memoryIt = testEffect(
+  SystemPrompt.layer.pipe(
     Layer.provide(
-      Layer.succeed(
-        Skill.Service,
-        Skill.Service.of({
-          get: (name) => Effect.succeed(skills.find((skill) => skill.name === name)),
-          all: () => Effect.succeed(skills),
-          dirs: () => Effect.succeed([]),
-          available: () => Effect.succeed(skills),
-        }),
+      Layer.mergeAll(
+        skillLayer,
+        memoryLayer
       ),
     ),
   ),
@@ -68,6 +87,14 @@ describe("session.system", () => {
       expect(alpha).toBeGreaterThan(-1)
       expect(middle).toBeGreaterThan(alpha)
       expect(zeta).toBeGreaterThan(middle)
+    }),
+  )
+
+  memoryIt.effect("memory returns the stored memory content", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.memory()
+      expect(output).toBe("test memory content here")
     }),
   )
 })

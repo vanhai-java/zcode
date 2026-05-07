@@ -15,6 +15,7 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { Memory } from "@/memory"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -35,6 +36,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly memory: () => Effect.Effect<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -43,6 +45,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const memory = yield* Memory.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
@@ -75,10 +78,13 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+      memory: Effect.fn("SystemPrompt.memory")(function* () {
+        return yield*  memory.get()
+      }),
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(Memory.defaultLayer))
 
 export * as SystemPrompt from "./system"
